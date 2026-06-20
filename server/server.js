@@ -1,0 +1,115 @@
+require('dotenv').config({ path: __dirname + '/.env' });
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const compression = require('compression');
+const cookieParser = require('cookie-parser');
+const rateLimit = require('express-rate-limit');
+
+const connectDB = require('./config/db');
+const errorHandler = require('./middleware/errorHandler');
+const { socketHandler } = require('./socket/socketHandler');
+
+const app = express();
+const server = http.createServer(app);
+
+// ─── Socket.io Setup ──────────────────────────────────────────────────────────
+const io = new Server(server, {
+  cors: {
+    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    credentials: true,
+  },
+});
+
+socketHandler(io);
+
+// Connect to MongoDB
+connectDB();
+
+// ─── Global Security & Optimization Middlewares ─────────────────────────────────
+app.use(helmet({
+  crossOriginResourcePolicy: false, // Allow loading images from backend
+}));
+
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    credentials: true,
+  })
+);
+
+app.use(cookieParser());
+app.use(compression());
+
+if (process.env.NODE_ENV === 'development') {
+  app.use(morgan('dev'));
+} else {
+  app.use(morgan('combined'));
+}
+
+// Rate Limiting (Prevent abuse)
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 1000, // Limit each IP to 1000 requests per window
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/', limiter);
+
+// ─── Stripe Webhook (MUST be before express.json() to get raw body) ──────────────
+const { stripeWebhook } = require('./controllers/paymentController');
+app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), stripeWebhook);
+
+// ─── JSON & URL-Encoded Body Parsers ──────────────────────────────────────────
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// ─── Mount API Routes ─────────────────────────────────────────────────────────
+app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/users', require('./routes/userRoutes'));
+app.use('/api/services', require('./routes/serviceRoutes'));
+app.use('/api/requests', require('./routes/requestRoutes'));
+app.use('/api/reviews', require('./routes/reviewRoutes'));
+app.use('/api/admin', require('./routes/adminRoutes'));
+app.use('/api/chat', require('./routes/chatRoutes'));
+app.use('/api/payments', require('./routes/paymentRoutes'));
+app.use('/api/jobs', require('./routes/jobRoutes'));
+app.use('/api/wallet', require('./routes/walletRoutes'));
+app.use('/api/ai', require('./routes/aiRoutes'));
+app.use('/api/support', require('./routes/supportRoutes'));
+
+// ─── Health Check Route ───────────────────────────────────────────────────────
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'SkillBridge Service Marketplace API is healthy and running.',
+    timestamp: new Date(),
+  });
+});
+
+// ─── 404 Route handler ────────────────────────────────────────────────────────
+app.use((req, res, next) => {
+  res.status(404).json({
+    success: false,
+    message: `API Route not found: ${req.originalUrl}`,
+  });
+});
+
+// ─── Global Error Handler Middleware ──────────────────────────────────────────
+app.use(errorHandler);
+
+// ─── Listen to Port ───────────────────────────────────────────────────────────
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => {
+  console.log(`🚀 Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+});
+
+process.on('unhandledRejection', (err) => {
+  console.error(`❌ Unhandled Rejection: ${err.message}`);
+  // Keep server running but log error
+});

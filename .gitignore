@@ -1,0 +1,59 @@
+# Environment variables
+.env
+.env.local
+.env.*.local
+server/.env
+client/.env
+# Dependencies
+node_modules/
+package-lock.json
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build output
+dist/
+build/
+.next/
+out/
+
+# Cache
+.cache/
+.parcel-cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+logs/
+*.log
+
+# Testing
+coverage/
+.nyc_output/
+
+# OS
+Thumbs.db
+
+# Database
+*.sqlite
+*.db
+
+# Uploads / temp files
+uploads/
+tmp/
+temp/
+
+# Secrets
+*.pem
+*.key
+*.crt
+
+# Misc
+.env.production
+.env.development
