@@ -2,7 +2,7 @@
 
 A premium, production-ready MERN-stack service marketplace (similar to Fiverr/Upwork) featuring a 3D interactive, animated UI (built with React Three Fiber, Three.js, and Vanilla CSS), real-time notifications, chat (Socket.io), MongoDB transaction-safe operations, and full-featured customer, provider, and administrator portals.
 
-**GitHub Repository:** https://github.com/abaid9658/SkillBridge-Multi-Vendor-Market-Platform
+**GitHub Repository:** https://github.com/abaid9658/SkillBridge-Marketplace
 
 ---
 
