@@ -1,0 +1,47 @@
+name: Security Vulnerability Scanner
+
+on:
+  schedule:
+    - cron: '0 0 * * 0' # Run weekly on Sunday
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  npm-audit:
+    name: NPM Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Audit Server Dependencies
+        working-directory: ./server
+        run: npm audit --audit-level=high
+        
+      - name: Audit Client Dependencies
+        working-directory: ./client
+        run: npm audit --audit-level=high
+
+  container-scan:
+    name: Trivy Container Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Build Server Image
+        working-directory: ./server
+        run: docker build -t skillbridge-server:test .
+        
+      - name: Run Trivy scanner on Server
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'skillbridge-server:test'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'

@@ -1,0 +1,40 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: skillbridge-ingress
+  namespace: skillbridge
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # Optional: cert-manager for automatic TLS Let's Encrypt
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # CORS enabled
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://skillbridge.vercel.app"
+spec:
+  # tls:
+  #   - hosts:
+  #       - api.skillbridge.com
+  #     secretName: skillbridge-tls
+  rules:
+    - host: api.skillbridge.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: skillbridge-server-svc
+                port:
+                  number: 5000
+    # Uncomment to serve client from same cluster
+    # - host: skillbridge.com
+    #   http:
+    #     paths:
+    #       - path: /
+    #         pathType: Prefix
+    #         backend:
+    #           service:
+    #             name: skillbridge-client-svc
+    #             port:
+    #               number: 80

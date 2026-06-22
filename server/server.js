@@ -30,7 +30,22 @@ socketHandler(io);
 // Connect to MongoDB
 connectDB();
 
+// ─── Security Custom Middlewares ──────────────────────────────────────────────
+const {
+  mongoSanitizeMiddleware,
+  xssMiddleware,
+  hppMiddleware,
+  payloadGuard,
+  securityHeaders,
+  authRateLimiter
+} = require('./middleware/security');
+
 // ─── Global Security & Optimization Middlewares ─────────────────────────────────
+// Trust proxy if behind Render/Vercel load balancer
+app.set('trust proxy', 1);
+
+app.use(securityHeaders);
+
 app.use(helmet({
   crossOriginResourcePolicy: false, // Allow loading images from backend
 }));
@@ -60,6 +75,15 @@ const limiter = rateLimit({
   legacyHeaders: false,
 });
 app.use('/api/', limiter);
+
+// Apply custom security guards to API routes
+app.use('/api/', mongoSanitizeMiddleware);
+app.use('/api/', xssMiddleware);
+app.use('/api/', hppMiddleware);
+app.use('/api/', payloadGuard);
+
+// Specific rate limiter for auth routes
+app.use('/api/auth', authRateLimiter);
 
 // ─── Stripe Webhook (MUST be before express.json() to get raw body) ──────────────
 const { stripeWebhook } = require('./controllers/paymentController');

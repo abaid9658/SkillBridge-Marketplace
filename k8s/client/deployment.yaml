@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: skillbridge-client
+  namespace: skillbridge
+  labels:
+    app: skillbridge-client
+    tier: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: skillbridge-client
+  template:
+    metadata:
+      labels:
+        app: skillbridge-client
+        tier: frontend
+    spec:
+      containers:
+        - name: client
+          image: ghcr.io/abaid9658/skillbridge-client:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10

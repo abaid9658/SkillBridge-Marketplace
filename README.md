@@ -1,8 +1,6 @@
-# SkillBridge - Multi-Vendor Market Platform
+# SkillBridge Multi-Vendor Service Marketplace Platform
 
-A premium, production-ready MERN-stack service marketplace (similar to Fiverr/Upwork) featuring a 3D interactive, animated UI (built with React Three Fiber, Three.js, and Vanilla CSS), real-time notifications, chat (Socket.io), MongoDB transaction-safe operations, and full-featured customer, provider, and administrator portals.
-
-**GitHub Repository:** https://github.com/abaid9658/SkillBridge-Marketplace
+A premium, production-ready MERN-stack service marketplace (similar to Fiverr/Upwork) featuring a 3D interactive UI, real-time Socket.io chat, Stripe payments, and a fully containerized DevOps pipeline.
 
 ---
 
@@ -10,127 +8,124 @@ A premium, production-ready MERN-stack service marketplace (similar to Fiverr/Up
 
 ### 🎨 3D & Premium Interactive UI/UX
 - **Dynamic 3D Hero Scene**: Floating, animated 3D geometries responding to cursor movements and scroll states.
-- **Glassmorphism Design System**: Harmonious color palettes using custom HSL/CSS variables, smooth micro-animations, and modern typography (Inter & Outfit).
+- **Glassmorphism Design System**: Harmonious color palettes using custom HSL/CSS variables, smooth micro-animations.
 - **Responsive Portals**: Tailored interfaces for Customers, Service Providers, and Administrators.
-- **System-Aware Dark Mode**: Adaptive theme toggling with smooth transitions.
 
 ### ⚡ Professional Backend & Database Optimization
-- **Mongoose Transaction Safety**: MongoDB ACID transactions guarantee consistency on crucial operations, such as reviewing a provider and atomically recalculating reviews and ratings.
-- **Connection Pooling**: Pre-configured MongoDB connection pool (`minPoolSize: 5`, `maxPoolSize: 50`) with automatic retry policies for high-traffic environments.
-- **Indexing & Queries**: Compounded and text-based indexing on services and requests to enable high-concurrency read-write optimization.
-- **Rate-Limiting & Security**: Implemented `express-rate-limit`, `helmet`, CORS, and standard CSRF/JWT protection mechanisms.
+- **Mongoose Transaction Safety**: MongoDB ACID transactions guarantee consistency on crucial operations (reviews, ratings).
+- **Connection Pooling**: Pre-configured MongoDB connection pool (`minPoolSize: 5`, `maxPoolSize: 50`).
+- **Indexing**: Compounded and text-based indexing on services for fast search.
 
 ### 💬 Real-Time Communications
-- **Socket.io Integration**: Live chat messaging between customers and service providers, showing online/offline states, message status, and instant delivery.
+- **Socket.io Integration**: Live chat messaging between customers and service providers.
 
 ### 💳 Stripe & Notifications Integration
-- **Stripe Checkout**: Complete booking payment flow with Stripe webhook processing for database confirmation.
+- **Stripe Checkout**: Complete booking payment flow with webhook processing.
 - **Nodemailer Alerts**: Automatic email notifications when request statuses update.
 
 ---
 
-## 🛠️ Database Schema
+## 🛡️ Security Hardening
 
-### 1. User Model (`User.js`)
-- `name` (String, required)
-- `email` (String, unique, indexed)
-- `password` (String, bcrypt hashed)
-- `role` (Enum: `customer`, `provider`, `admin`)
-- `profilePicture` (String)
-- `skills` (Array of Strings, indexed)
-- `experience` (String)
-- `pricing` (Number)
-- `portfolio` (Array of Strings/URLs)
-- `bio` (String)
-- `location` (String)
-- `avgRating` (Number, default 0)
-- `totalReviews` (Number, default 0)
+This project implements a robust 7-layer security middleware stack:
 
-### 2. Service Model (`Service.js`)
-- `provider` (ObjectId -> User ref, indexed)
-- `title` (String, text-indexed)
-- `description` (String, text-indexed)
-- `category` (String, indexed)
-- `price` (Number, indexed)
-- `deliveryTime` (Number, days)
-- `images` (Array of Strings)
-- `status` (Enum: `active`, `inactive`)
-- `avgRating` (Number)
-
-### 3. ServiceRequest Model (`ServiceRequest.js`)
-- `customer` (ObjectId -> User ref, indexed)
-- `service` (ObjectId -> Service ref)
-- `provider` (ObjectId -> User ref, indexed)
-- `requirements` (String)
-- `budget` (Number)
-- `deadline` (Date)
-- `status` (Enum: `pending`, `accepted`, `in-progress`, `delivered`, `completed`, `cancelled`, indexed)
-- `paymentStatus` (Enum: `pending`, `paid`, `refunded`)
-- `stripeSessionId` (String)
+1. **NoSQL Injection Prevention**: `express-mongo-sanitize` strips `$` and `.` operators.
+2. **Cross-Site Scripting (XSS)**: `xss` filters malicious scripts and HTML tags from user input.
+3. **HTTP Parameter Pollution (HPP)**: `hpp` prevents duplicate query string parameter exploits.
+4. **Custom Payload Guard**: Blocks common malicious patterns (e.g., `$where`, `eval()`).
+5. **Rate Limiting**: Dedicated auth route limting (10 requests / 15 mins) to prevent brute-force attacks.
+6. **Security Headers**: `helmet` + custom headers (CSP, nosniff, frame-options).
+7. **Rich Text Sanitization**: `sanitize-html` strictly controls allowed tags in bio/descriptions.
 
 ---
 
-## 📡 Core API Routes
+## 🐳 DevOps & Containerization
 
-### Auth Routes (`/api/auth`)
-- `POST /register` - Register a new user (with role choice)
-- `POST /login` - Login user (returns JWT inside cookie)
-- `GET /me` - Get current authenticated user details
-- `POST /logout` - Log out and clear tokens
+### Docker Environment
 
-### Service Routes (`/api/services`)
-- `GET /` - Query, paginate, search, and filter services
-- `POST /` - Create a service listing (Providers only)
-- `GET /:id` - Get individual service details
-- `PUT /:id` - Edit a service (Owner only)
-- `DELETE /:id` - Delete a service (Owner/Admin)
+The full application is containerized using multi-stage builds.
 
-### Request Routes (`/api/requests`)
-- `POST /` - Submit a service request/booking (Customers only)
-- `GET /` - List requests for authenticated user (scoped by role)
-- `PUT /:id/status` - Update request workflow state (pending -> accepted -> in-progress -> delivered -> completed)
+**Run locally with Docker Compose:**
+```bash
+docker compose up --build
+```
+This spins up:
+- `mongodb` (Port 27017)
+- `server` Node.js API (Port 5000)
+- `client` Nginx serving React (Port 80)
 
-### Review Routes (`/api/reviews`)
-- `POST /` - Add review for service & provider (Transaction-safe avg rating calculation)
-- `GET /provider/:id` - Fetch all reviews for a specific provider
+### Kubernetes (K8s)
+
+Production-ready Kubernetes manifests are located in the `/k8s` directory:
+- **Deployments**: Client (Nginx) and Server (Node.js)
+- **HPA**: Server automatically scales from 3 to 10 pods based on CPU/Memory usage.
+- **Ingress**: Configured for routing `/` to the frontend and `/api` to the backend.
+
+To apply to a cluster:
+```bash
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/configmap.yaml
+# Edit k8s/secret.yaml.template with your base64 secrets first, then apply
+kubectl apply -f k8s/server/
+kubectl apply -f k8s/client/
+kubectl apply -f k8s/ingress.yaml
+```
 
 ---
 
-## ⚙️ Running Locally
+## 🔄 CI/CD Pipelines
 
-### 1. Prerequisites
-- Node.js (v18+)
-- MongoDB Atlas cluster or local instance
+Automated via **GitHub Actions** (`.github/workflows`):
 
-### 2. Environment Variables (.env)
-Create a `.env` file in the `/server` directory:
+1. **Continuous Integration (`ci.yml`)**:
+   - Triggers on push/PR to `main` and `develop`.
+   - Runs npm lint, build checks, and server syntax verification.
+   - On successful build to `main`, automatically deploys:
+     - Frontend to **Vercel**
+     - Backend to **Render**
+
+2. **Security Scanning (`security-scan.yml`)**:
+   - Runs weekly and on PRs.
+   - Executes `npm audit` for dependency vulnerabilities.
+   - Uses **Trivy** to scan Docker images for OS and library vulnerabilities.
+
+---
+
+## ⚙️ Environment Variables
+
+### Backend (`server/.env`)
 ```env
+NODE_ENV=development
 PORT=5000
-MONGO_URI=your_mongodb_uri
-JWT_SECRET=your_jwt_secret
+MONGO_URI=mongodb://localhost:27017/skillbridge
+JWT_SECRET=your_secret_key
 JWT_EXPIRE=7d
+
 CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_api_key
 CLOUDINARY_API_SECRET=your_api_secret
-STRIPE_SECRET_KEY=your_stripe_key
-STRIPE_WEBHOOK_SECRET=your_webhook_secret
+
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+
 EMAIL_HOST=smtp.gmail.com
 EMAIL_PORT=587
 EMAIL_USER=your_email@gmail.com
 EMAIL_PASS=your_app_password
+
 CLIENT_URL=http://localhost:5173
 ```
 
-### 3. Server Setup
-```bash
-cd server
-npm install
-npm run dev
+### Frontend (`client/.env`)
+```env
+VITE_API_URL=http://localhost:5000
+VITE_STRIPE_PUBLIC_KEY=pk_test_...
 ```
 
-### 4. Client Setup
-```bash
-cd client
-npm install
-npm run dev
-```
+---
+
+## 🚀 Deployment Configs Included
+
+- **Vercel**: Pre-configured `vercel.json` for SPA routing and build output.
+- **Render**: Infrastructure-as-code `render.yaml` for zero-downtime backend deployment.
+- **Nginx**: Production `nginx.conf` included for Docker/K8s client serving with aggressive caching and security headers.
