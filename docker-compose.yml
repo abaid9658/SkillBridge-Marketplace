@@ -1,0 +1,83 @@
+# ─── Docker Compose — SkillBridge Full Stack ──────────────────────────────────
+# Usage:
+#   Local dev:        docker compose up --build
+#   Production-like:  docker compose -f docker-compose.yml up --build -d
+
+version: '3.9'
+
+networks:
+  skillbridge-net:
+    driver: bridge
+
+volumes:
+  mongo-data:
+    driver: local
+
+services:
+
+  # ─── MongoDB ────────────────────────────────────────────────────────────────
+  mongodb:
+    image: mongo:7.0
+    container_name: skillbridge-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASS:-secret}
+      MONGO_INITDB_DATABASE: skillbridge
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - skillbridge-net
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/skillbridge --quiet
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ─── Backend API ────────────────────────────────────────────────────────────
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: skillbridge-server
+    restart: unless-stopped
+    env_file:
+      - ./server/.env
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      # Override MONGO_URI to point to the Docker mongo service
+      MONGO_URI: mongodb://${MONGO_ROOT_USER:-admin}:${MONGO_ROOT_PASS:-secret}@mongodb:27017/skillbridge?authSource=admin
+    ports:
+      - "5000:5000"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - skillbridge-net
+    healthcheck:
+      test: wget -qO- http://localhost:5000/health || exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ─── Frontend (Nginx) ───────────────────────────────────────────────────────
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:5000
+    container_name: skillbridge-client
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      server:
+        condition: service_healthy
+    networks:
+      - skillbridge-net

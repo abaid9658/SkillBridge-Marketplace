@@ -1,0 +1,129 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: skillbridge-server
+  namespace: skillbridge
+  labels:
+    app: skillbridge-server
+    tier: backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: skillbridge-server
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1         # Allow 1 extra pod during updates
+      maxUnavailable: 0   # Zero downtime rolling update
+  template:
+    metadata:
+      labels:
+        app: skillbridge-server
+        tier: backend
+    spec:
+      # Security context: run as non-root
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+
+      containers:
+        - name: server
+          image: ghcr.io/abaid9658/skillbridge-server:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+              protocol: TCP
+
+          # ─── Environment from ConfigMap ─────────────────────────────────────
+          envFrom:
+            - configMapRef:
+                name: skillbridge-config
+
+          # ─── Secrets as environment variables ───────────────────────────────
+          env:
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: skillbridge-secrets
+                  key: MONGO_URI
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: skillbridge-secrets
+                  key: JWT_SECRET
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: skillbridge-secrets
+                  key: STRIPE_SECRET_KEY
+            - name: STRIPE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: skillbridge-secrets
+                  key: STRIPE_WEBHOOK_SECRET
+            - name: CLOUDINARY_CLOUD_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: skillbridge-secrets
+                  key: CLOUDINARY_CLOUD_NAME
+            - name: CLOUDINARY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: skillbridge-secrets
+                  key: CLOUDINARY_API_KEY
+            - name: CLOUDINARY_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: skillbridge-secrets
+                  key: CLOUDINARY_API_SECRET
+            - name: EMAIL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: skillbridge-secrets
+                  key: EMAIL_USER
+            - name: EMAIL_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: skillbridge-secrets
+                  key: EMAIL_PASS
+            - name: CLIENT_URL
+              value: "https://skillbridge.vercel.app"
+
+          # ─── Resource Limits ─────────────────────────────────────────────────
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+          # ─── Liveness Probe (restart if unhealthy) ──────────────────────────
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            failureThreshold: 3
+            timeoutSeconds: 5
+
+          # ─── Readiness Probe (only route traffic when ready) ─────────────────
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 5
+
+          # ─── Container Security Context ──────────────────────────────────────
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
