@@ -16,10 +16,16 @@ const { socketHandler } = require('./socket/socketHandler');
 const app = express();
 const server = http.createServer(app);
 
+// ─── Allowed Origins ──────────────────────────────────────────────────────────
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://skill-bridge-marketplace.vercel.app',
+];
+
 // ─── Socket.io Setup ──────────────────────────────────────────────────────────
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    origin: allowedOrigins,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true,
   },
@@ -47,24 +53,18 @@ app.set('trust proxy', 1);
 app.use(securityHeaders);
 
 app.use(helmet({
-  crossOriginResourcePolicy: false, // Allow loading images from backend
+  crossOriginResourcePolicy: false,
 }));
-
-const allowedOrigins = [
-  'http://localhost:5173',
-  'https://skill-bridge-marketplace.vercel.app',
-];
 
 app.use(
   cors({
     origin: function (origin, callback) {
+      // Allow requests with no origin (mobile apps, curl, Postman, server-to-server)
       if (!origin) return callback(null, true);
-
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
-
-      return callback(new Error('Not allowed by CORS'));
+      return callback(new Error(`CORS: Origin '${origin}' not allowed.`));
     },
     credentials: true,
   })

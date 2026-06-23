@@ -7,17 +7,19 @@ const { sendWelcomeEmail } = require('../utils/email');
 const sendTokenResponse = (user, statusCode, res, message = 'Success') => {
   const token = user.getSignedJwtToken();
 
+  const isProduction = process.env.NODE_ENV === 'production';
+
   const cookieOptions = {
     expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    // In production (cross-origin: Vercel → Render), cookies MUST be:
+    //   secure: true (HTTPS only) + sameSite: 'none' (allows cross-origin)
+    // In development (same-origin), sameSite: 'lax' works fine
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
   };
 
   res.cookie('token', token, cookieOptions);
-
-  const userObj = { ...user._doc };
-  delete userObj.password;
 
   res.status(statusCode).json({
     success: true,
