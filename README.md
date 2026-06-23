@@ -4,6 +4,14 @@ A premium, production-ready MERN-stack service marketplace (similar to Fiverr/Up
 
 ---
 
+## 🔗 Live Project Deployments
+
+* **Live Frontend Website**: [https://skill-bridge-marketplace.vercel.app/](https://skill-bridge-marketplace.vercel.app/)
+* **Live API Backend Endpoint**: [https://skillbridge-api-n6qv.onrender.com](https://skillbridge-api-n6qv.onrender.com)
+* **GitHub Repository**: [https://github.com/abaid9658/SkillBridge-Marketplace](https://github.com/abaid9658/SkillBridge-Marketplace)
+
+---
+
 ## 🚀 Key Features
 
 ### 🎨 3D & Premium Interactive UI/UX
@@ -30,10 +38,10 @@ A premium, production-ready MERN-stack service marketplace (similar to Fiverr/Up
 This project implements a robust 7-layer security middleware stack:
 
 1. **NoSQL Injection Prevention**: `express-mongo-sanitize` strips `$` and `.` operators.
-2. **Cross-Site Scripting (XSS)**: `xss` filters malicious scripts and HTML tags from user input.
+2. **Cross-Site Scripting (XSS)**: `xss-clean` filters malicious scripts and HTML tags from user input.
 3. **HTTP Parameter Pollution (HPP)**: `hpp` prevents duplicate query string parameter exploits.
 4. **Custom Payload Guard**: Blocks common malicious patterns (e.g., `$where`, `eval()`).
-5. **Rate Limiting**: Dedicated auth route limting (10 requests / 15 mins) to prevent brute-force attacks.
+5. **Rate Limiting**: Dedicated auth route limiting (10 requests / 15 mins) to prevent brute-force attacks.
 6. **Security Headers**: `helmet` + custom headers (CSP, nosniff, frame-options).
 7. **Rich Text Sanitization**: `sanitize-html` strictly controls allowed tags in bio/descriptions.
 
@@ -126,6 +134,6 @@ VITE_STRIPE_PUBLIC_KEY=pk_test_...
 
 ## 🚀 Deployment Configs Included
 
-- **Vercel**: Pre-configured `vercel.json` for SPA routing and build output.
-- **Render**: Infrastructure-as-code `render.yaml` for zero-downtime backend deployment.
+- **Vercel**: Pre-configured `vercel.json` (inside `client/vercel.json`) for SPA routing and build output.
 - **Nginx**: Production `nginx.conf` included for Docker/K8s client serving with aggressive caching and security headers.
+- **Render**: Configured for manual Free Web Service deployment (see [walkthrough.md](walkthrough.md) for details).
