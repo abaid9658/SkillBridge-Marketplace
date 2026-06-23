@@ -1,114 +1,139 @@
+require('dotenv').config({ path: __dirname + '/.env' });
 const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
 const cors = require('cors');
-const dotenv = require('dotenv');
-const mongoose = require('mongoose');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const compression = require('compression');
+const cookieParser = require('cookie-parser');
+const rateLimit = require('express-rate-limit');
 
-// Load environment variables
-dotenv.config();
+const connectDB = require('./config/db');
+const errorHandler = require('./middleware/errorHandler');
+const { socketHandler } = require('./socket/socketHandler');
 
 const app = express();
+const server = http.createServer(app);
 
-// ==========================================
-// 1. CORS CONFIGURATION (Sab se upar hona zaroori hai)
-// ==========================================
-const allowedOrigins = [
-  'http://localhost:5173',
-  'https://skillbridge-marketplace.vercel.app'
-];
-
-app.use(cors({
-  origin: function (origin, callback) {
-    // Local host ya explicit allowed domains
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-      return callback(null, true);
-    }
-
-    // Vercel ke saare dynamic preview subdomains ko allow karne ke liye regex
-    if (/^[a-zA-Z0-9.-]+\.vercel\.app$/.test(origin)) {
-      return callback(null, true);
-    }
-
-    return callback(new Error('Blocked by CORS policy!'));
+// ─── Socket.io Setup ──────────────────────────────────────────────────────────
+const io = new Server(server, {
+  cors: {
+    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    credentials: true,
   },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+});
+
+socketHandler(io);
+
+// Connect to MongoDB
+connectDB();
+
+// ─── Security Custom Middlewares ──────────────────────────────────────────────
+const {
+  mongoSanitizeMiddleware,
+  xssMiddleware,
+  hppMiddleware,
+  payloadGuard,
+  securityHeaders,
+  authRateLimiter
+} = require('./middleware/security');
+
+// ─── Global Security & Optimization Middlewares ─────────────────────────────────
+// Trust proxy if behind Render/Vercel load balancer
+app.set('trust proxy', 1);
+
+app.use(securityHeaders);
+
+app.use(helmet({
+  crossOriginResourcePolicy: false, // Allow loading images from backend
 }));
 
-// ==========================================
-// 2. STRIPE WEBHOOK ROUTE (express.json() se PEHLE)
-// ==========================================
-app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  let event;
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    credentials: true,
+  })
+);
 
-  try {
-    // stripe package require yahan handle ho rha hai
-    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-    event = stripe.webhooks.constructEvent(
-      req.body, // Raw buffer
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET
-    );
-  } catch (err) {
-    console.error(`❌ Webhook Error: ${err.message}`);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
+app.use(cookieParser());
+app.use(compression());
 
-  // Webhook Event Logic
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
-    console.log(`💳 Payment successful for session: ${session.id}`);
-    // Yahan apni order/booking fulfillment ki logic add karein
-  }
-
-  res.json({ received: true });
-});
-
-// ==========================================
-// 3. GLOBAL MIDDLEWARES (Webhook ke baad)
-// ==========================================
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// Security middleware config agar aap use kar rhe hain
-try {
-  const securityMiddleware = require('./middleware/security');
-  app.use(securityMiddleware);
-} catch (e) {
-  console.log("ℹ️ Optional security middleware not initialized yet.");
+if (process.env.NODE_ENV === 'development') {
+  app.use(morgan('dev'));
+} else {
+  app.use(morgan('combined'));
 }
 
-// ==========================================
-// 4. API ROUTES
-// ==========================================
-// Apne routes ko yahan require aur map karein
-// app.use('/auth', require('./routes/authRoutes'));
-// app.use('/api', require('./routes/apiRoutes'));
-
-// Health check endpoint for Render
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'OK', environment: process.env.NODE_ENV });
+// Rate Limiting (Prevent abuse)
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 1000, // Limit each IP to 1000 requests per window
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
 });
+app.use('/api/', limiter);
 
-// Global 404 Fallback Catch-all Router
-app.use((req, res) => {
-  res.status(404).json({ success: false, message: `API Route not found: ${req.originalUrl}` });
-});
+// Apply custom security guards to API routes
+app.use('/api/', mongoSanitizeMiddleware);
+app.use('/api/', xssMiddleware);
+app.use('/api/', hppMiddleware);
+app.use('/api/', payloadGuard);
 
-// ==========================================
-// 5. DATABASE CONNECTION & SERVER START
-// ==========================================
-const PORT = process.env.PORT || 5000;
+// Specific rate limiter for auth routes
+app.use('/api/auth', authRateLimiter);
 
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log("✅ MongoDB Connected Successfully");
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-    });
-  })
-  .catch((err) => {
-    console.error("❌ MongoDB connection error:", err.message);
-    process.exit(1);
+// ─── Stripe Webhook (MUST be before express.json() to get raw body) ──────────────
+const { stripeWebhook } = require('./controllers/paymentController');
+app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), stripeWebhook);
+
+// ─── JSON & URL-Encoded Body Parsers ──────────────────────────────────────────
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// ─── Mount API Routes ─────────────────────────────────────────────────────────
+app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/users', require('./routes/userRoutes'));
+app.use('/api/services', require('./routes/serviceRoutes'));
+app.use('/api/requests', require('./routes/requestRoutes'));
+app.use('/api/reviews', require('./routes/reviewRoutes'));
+app.use('/api/admin', require('./routes/adminRoutes'));
+app.use('/api/chat', require('./routes/chatRoutes'));
+app.use('/api/payments', require('./routes/paymentRoutes'));
+app.use('/api/jobs', require('./routes/jobRoutes'));
+app.use('/api/wallet', require('./routes/walletRoutes'));
+app.use('/api/ai', require('./routes/aiRoutes'));
+app.use('/api/support', require('./routes/supportRoutes'));
+
+// ─── Health Check Route ───────────────────────────────────────────────────────
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'SkillBridge Service Marketplace API is healthy and running.',
+    timestamp: new Date(),
   });
+});
+
+// ─── 404 Route handler ────────────────────────────────────────────────────────
+app.use((req, res, next) => {
+  res.status(404).json({
+    success: false,
+    message: `API Route not found: ${req.originalUrl}`,
+  });
+});
+
+// ─── Global Error Handler Middleware ──────────────────────────────────────────
+app.use(errorHandler);
+
+// ─── Listen to Port ───────────────────────────────────────────────────────────
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => {
+  console.log(`🚀 Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+});
+
+process.on('unhandledRejection', (err) => {
+  console.error(`❌ Unhandled Rejection: ${err.message}`);
+  // Keep server running but log error
+});
